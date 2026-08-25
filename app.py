@@ -2,6 +2,8 @@
 import json
 import time
 import requests
+import os
+import threading
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -11,6 +13,7 @@ ROUTES_FILE = os.environ.get("ROUTES_FILE", "/etc/proxy-config/routes.json")
 failures = {}          # backend_name -> consecutive failure count
 breaker_open_until = {} # backend_name -> timestamp when breaker resets
 lock = threading.Lock()
+state = {}
 
 FAILURE_THRESHOLD = 3
 COOLDOWN_SECONDS = 15
@@ -69,3 +72,6 @@ def proxy_screen(backend_name):
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))
