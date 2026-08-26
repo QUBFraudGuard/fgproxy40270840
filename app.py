@@ -18,6 +18,11 @@ state = {}
 FAILURE_THRESHOLD = 3
 COOLDOWN_SECONDS = 15
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
 
 def load_routes():
     # re-read the file on every request — this is what makes it
@@ -35,18 +40,18 @@ def get_state(name):
     return current
 
 
-def call_backend(name, url, params):
+def call_backend(name, url, endpoint, params):
     with lock:
         current_state = get_state(name)
         if current_state == "open":
             return None, "circuit open — backend temporarily unavailable"
 
     try:
-        resp = requests.get(url + "/screen", params=params, timeout=2.0)
+        resp = requests.get(f"{url}/{endpoint}", params=params, timeout=10.0)
         resp.raise_for_status()
         with lock:
             failures[name] = 0
-            state[name] = "closed"  # success closes the breaker, even from half-open
+            state[name] = "closed"
         return resp.json(), None
     except requests.RequestException:
         with lock:
@@ -57,13 +62,13 @@ def call_backend(name, url, params):
         return None, "backend call failed"
 
 
-@app.route("/screen/<backend_name>", methods=["GET"])
-def proxy_screen(backend_name):
+@app.route("/<endpoint>/<backend_name>", methods=["GET"])
+def proxy_forward(endpoint, backend_name):
     routes = load_routes()
     if backend_name not in routes:
         return jsonify({"error": "unknown backend"}), 404
 
-    data, error = call_backend(backend_name, routes[backend_name], dict(request.args))
+    data, error = call_backend(backend_name, routes[backend_name], endpoint, dict(request.args))
     if error:
         return jsonify({"error": error}), 502
     return jsonify(data)
