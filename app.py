@@ -24,11 +24,18 @@ def add_cors_headers(response):
     return response
 
 
+_last_good_routes = {}
+
 def load_routes():
-    # re-read the file on every request — this is what makes it
-    # "configurable without redeploying": edit routes.json, no rebuild needed
-    with open(ROUTES_FILE) as f:
-        return json.load(f)
+    global _last_good_routes
+    try:
+        with open(ROUTES_FILE) as f:
+            routes = json.load(f)
+        _last_good_routes = routes
+        return routes
+    except (json.JSONDecodeError, FileNotFoundError, OSError) as e:
+        print(f"[proxy] failed to load routes config, using last known good config: {e}", flush=True)
+        return _last_good_routes
 
 
 def get_state(name):
