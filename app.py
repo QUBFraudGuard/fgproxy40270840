@@ -51,21 +51,29 @@ def call_backend(name, url, endpoint, params):
     with lock:
         current_state = get_state(name)
         if current_state == "open":
+            print(f"[proxy] {name}: circuit open, refusing call", flush=True)
             return None, "circuit open — backend temporarily unavailable"
+
+    full_url = f"{url}/{endpoint}"
+    print(f"[proxy] forwarding to {name}: {full_url}", flush=True)
 
     try:
         resp = requests.get(f"{url}/{endpoint}", params=params, timeout=10.0)
         resp.raise_for_status()
+        print(f"[proxy] {name} responded {resp.status_code}", flush=True)
         with lock:
             failures[name] = 0
             state[name] = "closed"
         return resp.json(), None
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"[proxy] {name} call failed: {e}", flush=True)
         with lock:
             failures[name] = failures.get(name, 0) + 1
+            print(f"[proxy] {name}: failure count now {failures[name]}", flush=True)
             if current_state == "half_open" or failures[name] >= FAILURE_THRESHOLD:
                 state[name] = "open"
                 breaker_open_until[name] = time.time() + COOLDOWN_SECONDS
+                print(f"[proxy] {name}: circuit OPENED (cooldown until {breaker_open_until[name]})", flush=True)
         return None, "backend call failed"
 
 
